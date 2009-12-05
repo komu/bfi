@@ -1,0 +1,126 @@
+Memory structure
+================
+
+The memory cells of Brainfuck are organized to two distinct areas:
+_registers_ and _random-access memory_. Registers are placed at
+statically known locations in the beginning of Brainfuck's memory
+whereas the rest of the memory is dedicated to random access memory.
+
+Random-access memory
+====================
+
+The organization of random access memory requires a bit more detail.
+Since Brainfuck can't perform indexed memory access by it's own we
+have to build our own indexing. To do that, we organize the memory
+into blocks of three Brainfuck cells. The first block is known as
+_sentinel_ and is not an addressable memory location. Rest of the
+blocks are known as _locations_. The sentinel will be initialized to
+[1,0,0] while the locations are initialized to [0,0,0].
+
+Like the sentinel, each location consists of three cells. These are
+known as tmp1, tmp2 and value. Value holds the actual value of the
+location whereas tmp1 and tmp2 are used as scratch locations when
+performing memory lookups and stores. Algorithms operating on the
+memory assume that tmp1 and tmp2 of all locations are zero upon entering
+and they will leave them as zero on exit.
+
+   ,---------- sentinel
+   |   ,------ first location
+   |   |   ,-- second location
+   |   |   |
+   v   v   v  
+  100:000:000:000:000:000:000
+   ^^ ^^^
+   || |||
+   || ||`-- value
+   || |`--- tmp2
+   ||  `--- tmp1
+   |`------ arg2
+   `------- arg1
+
+Loads
+-----
+
+To initiate a memory load, the address of the derired location is
+placed in the arg1 int he sentinel whereas the data-pointer will
+point to the first cell of the sentinel. After that, the following
+code is executed:
+
+  >[->>+<<]>>     ; copy arg1 to tmp1
+  [-              ; while tmp1 is not zero, subtract one from it
+  [->>>+<<<]      ; and move it's value to tmp1 of next location
+  >>>]            ; then continue the process at next location
+
+When this loop stops, we have found the cell that we are interested in
+and must move its value back to a statically known location. We'll start
+by making a copy of our value in tmp2.
+
+  >>[-<+<+>>]<<   ; copy the found value to tmp1 and tmp2
+  [->>+<<]        ; then restore value from tmp1, zeroing tmp1
+
+We know that tmp1 of all preceding locations must be zero whereas the
+sentinel node will have 1 at that point. We can therefore loop backwards
+until we find a sentinel with 1. We will copy the found value with us 
+using the tmp1 cells of the locations in between.
+
+  -[              ; subtract one from the tmp1 to check for sentinel
+  +               ; restore the tmp1 to zero
+  >[-<<<+>>>]<    ; move tmp2 to previous location (or arg1 of sentinel)
+  <<<-]           ; continue the process with previous location
+  +               ; restore the sentinel mark to 1
+
+Once the process is complete, our value is in arg1 of the sentinel and
+the data-pointer will point to start of sentinel. The final code is thus:
+
+  >[->>+<<]>>[-[>>>+<<<-]>>>]>>[-<+<+>>]<<[->>+<<]-[+>[-<<<+>>>]<<<<-]+
+
+Once the code using the value has read it from arg1, it should reset it
+so that the next lookup will bring a correct value.
+
+Stores
+------
+
+When performing a store, we need to find a location and move our value
+onwards in the chain at the same time. We shall use tmp1 for the counter
+similarly as in lookup while tmp2 will be used for moving the value.
+
+To initiate store, the arg1 of the sentinel should be set to the address
+and arg2 should be set to the stored value. Data-pointer should point to
+beginning of sentinel.
+
+  >[->>+<<]>>     ; copy arg1 to tmp1
+  [-              ; while tmp1 is not zero, subtract one from it
+  [->>>+<<<]      ; and move its value to tmp1 of next location
+  >[->>>+<<<]     ; then move tmp2 to the next location
+  >>]             ; then continue the process at next location
+
+When the loop exists, we have found the correct location and we
+have to move the value from tmp2 to value-slot:
+
+  >>[-]           ; reset value to zero
+  <[->+<]         ; move tmp2 to value
+  <               ; move back to tmp1
+
+Finally we need to move back to a known location: the sentinel. We use
+a similar process as in the lookup, but this time we don't have to bring
+any data back with us.
+
+  -[              ; subtract one from the tmp1 to check for sentinel
+  +               ; restore the tmp1 to zero
+  <<<-]           ; continue the process with previous location
+  +               ; restore the sentinel mark to 1
+
+The full algorithm is thus:
+
+  >[->>+<<]>>[-[>>>+<<<-]>[>>>+<<<-]>>]>>[-]<[->+<]<-[+<<<-]+
+
+Once the process is complete, both arg0 and arg1 are zero and data-pointer
+will point to the start of sentinel.
+
+Optimization in VM
+==================
+
+Recognize code patterns of lookup and store. Keep track of highest
+address modified manually. If no accesses to memory are made from
+non-recognized code, use direct lookups. Otherwise use a native
+version which emulates all side-effects of Brainfuck-code.

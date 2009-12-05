@@ -1,0 +1,100 @@
+ 
+program structure:
+ 
+label = 1
+while (label) {
+    if (label == 1) {
+        basic-block
+    }
+    if (label == 2) {
+        basic-block
+    }
+    if (label == 3) {
+        basic-block
+    }
+}
+ 
+very primitives (brainfuck)
+ 
+  (inc)                  -> increment current value (+)
+  (dec)                  -> decrement current value (-)
+  (move-left)            -> move pointer to left (<)
+  (move-right)           -> move pointer to right (>)
+  (display)              -> writes the current value (.)
+  (read)                 -> reads to the current value (,)
+  (loop ...)             -> loops while current value is non-zero ([...])
+  (seq ...)              -> sequence of operations
+ 
+higher level "primitives" (no knowledge of registers):
+ 
+  (add n)                -> n consecutive incs or decs
+  (move n)               -> n consecutive move
+  (move-frames n)        -> moves n frames left or right, moving register values on the way
+  (reset)                -> (loop (dec))
+ 
+support for addressing:
+ 
+  (current-address r)    -> assign the frame's address to r
+  (move-to-address n)    -> (loop (move-left)) (move n))
+  (move-to-address r)    -> ...
+ 
+  (with-relative-address offset ...) -> (move offset) ... (move -offset)
+  (load target src)                  -> (assign 'heap-search-address src)
+                                        (perform-heap-lookup)
+                                        (assign target 'heap-found-address)
+  (perform-heap-lookup)              -> magic primitive, described above
+ 
+almost primitives:
+ 
+  (set (t1 t2 ...) n)       -> (move-to t1) (reset) (add n)
+                               (move-to t2) (reset) (add n)
+                               ...
+  (add-all (t1 t2 ...) src) -> (move-to src)
+                               (loop (move-to t1) (inc)
+                                     (move-to t2) (inc)
+                                     ...
+                                     (move-to src)
+                                     (dec))
+ 
+rewrites:
+ 
+  (transfer targets src) -> (set targets 0)
+                            (add-all targets src)
+  (assign x y)           -> (transfer ('scratch) y)
+                            (transfer (x y) 'scratch)
+ 
+  (while x ...)          -> (assign 'test x)
+                            (move-to 'test)
+                            (loop ... (assign 'test x) (move-to 'test))
+ 
+  (if x ...)             -> (assign 'test x)
+                            (move-to 'test)
+                            (loop ... (set 'test 0) (move-to 'test))
+ 
+  (eq? t x n)            -> ...
+ 
+  (exit)                 -> (set 'goto 0)
+  (goto n)               -> (set 'goto n)
+ 
+structure:
+ 
+  (program (label 1 ...) -> (set 'goto 1)
+           (label 2 ...)    (while 'goto
+           ...)                 (eq? 'test 'goto 1) (if 'test ...)
+                                (eq? 'test 'goto 2) (if 'test ...)
+                                ...
+ 
+  - basic blocks always end with goto
+ 
+label = 1
+while (label) {
+    if (label == 1) {
+        basic-block
+    }
+    if (label == 2) {
+        basic-block
+    }
+    if (label == 3) {
+        basic-block
+    }
+}
