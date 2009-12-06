@@ -1,9 +1,11 @@
 #!r6rs
 (library (bs asm-machine)
   (export define-machine machine-assemble
-	  seq copy copy/reset add subtract show-value
+	  copy copy/reset
+	  add subtract multiply
+	  show-value
 	  const const/char
-	  map-seq)
+	  seq map-seq)
   (import (rnrs base)
 	  (rnrs records syntactic)
 	  (bf asm-primitives)
@@ -63,6 +65,14 @@
 	[else 
 	 (error "add: invalid operand -- " + value)]))
 
+(define (multiply target value)
+  (check (register? target) "multiply: target is not a register -- " target)
+  
+  (seq (copy/reset reg.scratch1 target)
+       (while-non-zero reg.scratch1
+		       (add target value)
+		       (subtract reg.scratch1 (const 1)))))
+
 (define (subtract reg value)
   (check (register? reg) "subtract: target is not a register --" reg)
   (cond [(register? value)
@@ -95,6 +105,14 @@
 	    op ...
 	    (move-pointer (- offset))))]))
 
+(define-syntax while-non-zero
+  (syntax-rules ()
+    [(_ reg op ...)
+     (let ([offset (register-offset reg)])
+       (with-offset offset
+		    (loop (with-offset (- offset)
+				       op ...))))]))
+    
 (define (check condition . args)
   (if (not condition) (apply error args)))
 

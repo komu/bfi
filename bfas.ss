@@ -12,6 +12,11 @@
 (define-machine foo
                 (reg.val reg.argl reg.env reg.unenv reg.continue)
 		(load store)
+
+  (copy reg.val (const 7))
+  (copy reg.env (const 8))
+  (multiply reg.val reg.env)
+  (show-value reg.val)
   (store (const 26) (const/char #\a))
   (copy reg.val (const 26))
   (store reg.val (const/char #\b))
