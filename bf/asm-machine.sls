@@ -18,10 +18,11 @@
 (define const make-constant)
 (define (const/char c) (const (char->codepoint c)))
 
+(define (make-register n) n)
 (define (register? n) (integer? n))
 (define (register-offset n) n)
 
-(define reg.scratch 0)
+(define reg.scratch (make-register 0))
 
 ; exported op-codes
 
