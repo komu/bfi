@@ -1,7 +1,9 @@
 #!r6rs
 (library (bf utils)
-  (export flatmap take starts-with? starts-with-any? replicate make-counter)
-  (import (rnrs base))
+  (export flatmap take starts-with? starts-with-any? replicate make-counter
+	  char->codepoint)
+  (import (rnrs base)
+	  (rnrs bytevectors))
 
 (define (replicate n x)
   (if (zero? n)
@@ -42,5 +44,8 @@
     (let ([value count])
       (set! count (+ count 1))
       value)))
+
+(define (char->codepoint c)
+  (bytevector-u8-ref (string->utf8 (make-string 1 c)) 0))
 
 )

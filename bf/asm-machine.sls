@@ -1,43 +1,84 @@
 #!r6rs
 (library (bs asm-machine)
-  (export define-machine machine-assemble machine-copy machine-load machine-store
-	  seq transfer set-constant add-constant subtract-constant
-	  add-and-zero add-and-zero/relative add-with-scratch loop-while-not-equal
-	  const show-value)
+  (export define-machine machine-assemble copy machine-load machine-store
+	  seq copy add subtract show-value
+	  const const/char
+	  map-seq)
   (import (rnrs base)
 	  (rnrs records syntactic)
 	  (bf asm-primitives)
 	  (bf utils))
 
 (define-record-type machine
-  (fields initializer copy load store))
+  (fields initializer load store))
 
 (define-record-type constant
   (fields value))
 
 (define const make-constant)
+(define (const/char c) (const (char->codepoint c)))
 
-; export op-codes
+(define (register? n) (integer? n))
+(define (register-offset n) n)
 
-(define (show-value reg)
-  (with-offset reg (display-current)))
+(define reg.scratch 0)
 
+; exported op-codes
+
+(define (show-value value)
+  (with-value value (display-current)))
+
+;; helpers
+
+;; performs selected ops with given value which can either be a constant or register
+(define (with-value value . ops)
+  (cond [(constant? value)
+	 (with-constant (constant-value value) (apply seq ops))]
+	[(register? value)
+	 (with-register value (apply seq ops))]
+	[else 
+	 (error "invalid operand -- " value)]))
+
+(define (with-constant constant . items)
+  (seq (copy reg.scratch (const constant))
+       (apply seq items)
+       (copy reg.scratch (const 0))))
+
+(define (with-register reg . items)
+  (with-offset (register-offset reg)
+	       (apply seq items)))
 
 (define (with-offset offset . items)
   (seq (move-pointer offset)
        (apply seq items)
        (move-pointer (- offset))))
 
-(define (set-constant offset value)
-  (with-offset offset
-	       (loop (dec-current)) ; set to zero
-	       (add-current value)))
+(define (copy target source)
+  (cond [(register? source)
+	 (seq (copy target (const 0))
+	      (add-with-scratch source reg.scratch target))]
+	[(constant? source)
+	 (with-register target
+			(loop (dec-current)) ; set to zero
+			(add-current (constant-value source)))]
+	[else 
+	 (error "copy: invalid source operand -- " + source)]))
 
-(define (add-constant offset value)
-  (with-offset offset (add-current value)))
+(define (add reg value)
+  (cond [(register? value)
+	 (error "add with register is not supported -- " reg)]
+	[(constant? value)
+	 (with-register reg (add-current (constant-value value)))]
+	[else 
+	 (error "add: invalid operand -- " + value)]))
 
-(define (subtract-constant offset value)
-  (add-constant offset (- value)))
+(define (subtract reg value)
+  (cond [(register? value)
+	 (error "subtract with register is not supported -- " reg)]
+	[(constant? value)
+	 (add reg (const (- (constant-value value))))]
+	[else 
+	 (error "subtract: invalid operand -- " + value)]))
 
 (define (map-seq f xs)
   (apply seq (map f xs)))
@@ -59,15 +100,15 @@
   (add-and-zero loc (+ loc offset)))
 
 (define (transfer source target)
-  (seq (set-constant target 0)
+  (seq (copy target (const 0))
        (add-and-zero source target)))
 
 (define (loop-while-not-equal offset value . body)
-  (seq (subtract-constant offset value)   ; subtract to get zero if value is equal
-       (loop (add-constant offset value)  ; restore the value
+  (seq (subtract offset (const value))   ; subtract to get zero if value is equal
+       (loop (add offset (const value))  ; restore the value
 	     (apply seq body)
-	     (subtract-constant offset value))
-       (add-constant offset value)))      ; restore the value
+	     (subtract offset (const value)))
+       (add offset (const value))))      ; restore the value
 
 ; implementation
 
@@ -91,7 +132,7 @@
     (seq (add-and-zero mem.arg1
 		       (+ mem.frame-size mem.tmp1)) ; copy arg1 to tmp1 of first frame
 	 (move-pointer mem.frame-size)              ; move to first frame
-	 (loop (subtract-constant mem.tmp1 1)       ; while tmp1 is non-zero, subtract 1
+	 (loop (subtract mem.tmp1 (const 1))       ; while tmp1 is non-zero, subtract 1
 	       (add-and-zero/relative mem.tmp1 mem.frame-size)        
 	       (add-and-zero/relative mem.tmp2 mem.frame-size)
 	       (mem.move-to-next-frame))))
@@ -108,7 +149,7 @@
     (seq (add-and-zero mem.arg1
 		       (+ mem.frame-size mem.tmp1)) ; copy arg1 to tmp1 of first frame
 	 (move-pointer mem.frame-size)
-	 (loop (subtract-constant mem.tmp1 1)   ; while tmp1 is non-zero, subtract 1
+	 (loop (subtract mem.tmp1 (const 1))   ; while tmp1 is non-zero, subtract 1
 	       (add-and-zero/relative mem.tmp1 mem.frame-size) ; move tmp1 to next frame
 	       (mem.move-to-next-frame))))
 
@@ -121,10 +162,7 @@
        (add-with-scratch mem.value mem.tmp1 mem.tmp2) ; copy value to tmp2 using tmp1
        (return-back)))
 
-(define (make-memory mem.offset reg.scratch)
-  (define (copy-reg source target)
-    (seq (set-constant target 0)
-	 (add-with-scratch source reg.scratch target)))
+(define (make-memory mem.offset unused)
 
   (define reg.mem.arg1 (+ mem.offset mem.arg1))
   (define reg.mem.arg2 (+ mem.offset mem.arg2))
@@ -133,24 +171,26 @@
     (+ mem.offset (* (+ 1 addr) mem.frame-size) mem.value))
 
   (define (load-value address reg.target)
-    (if (constant? address)
-	(copy-reg (address-offset (constant-value address)) reg.target)
-	(seq (copy-reg address reg.mem.arg1)
-	     (with-offset mem.offset (mem.load-primitive))
-	     (copy-reg reg.mem.arg1 reg.target))))
+    (cond [(constant? address)
+	   (copy reg.target (address-offset (constant-value address)))]
+	  [(register? address)
+	   (seq (copy reg.mem.arg1 address)
+		(with-offset mem.offset (mem.load-primitive))
+		(copy reg.target reg.mem.arg1))]
+	  [else
+	   (error "load-value: invalid address -- " address)]))
 
   (define (store-value address value)
-    (if (constant? address)
-	(if (constant? value)
-	    (set-constant (address-offset (constant-value address))
-			  (constant-value value))
-	    (copy-reg value (address-offset (constant-value address))))
-	(seq (copy-reg address reg.mem.arg1)
-	     (copy-reg value reg.mem.arg2)
-	     (with-offset mem.offset (mem.store-primitive)))))
+    (cond [(constant? address)
+	   (copy (address-offset (constant-value address)) value)]
+	  [(register? address)
+	   (seq (copy reg.mem.arg1 address)
+		(copy reg.mem.arg2 value)
+		(with-offset mem.offset (mem.store-primitive)))]
+	  [else
+	   (error "store-value: invalid address -- " address)]))
   
-  (make-machine (set-constant mem.offset 1)
-		copy-reg
+  (make-machine (copy mem.offset (const 1))
 		load-value
 		store-value))
 
@@ -168,7 +208,7 @@
   (syntax-rules ()
     [(_ name m regs body ...) 
      (define (name)
-       (let ([c (make-counter 0)])
+       (let ([c (make-counter 1)])
 	 (define-machine-internal c m regs body ...)))]))
 
 )

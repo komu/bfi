@@ -9,19 +9,20 @@
   (display (optimize (assemble e)))
   (newline))
 
+(define (show-constant-string s)
+  (define (show-char c) (show-value (const/char c)))
+  (map-seq show-char (string->list s)))
+
 (define-machine foo m
                 (reg.val reg.argl reg.env reg.unenv reg.continue)
   
-  (let ([copy-reg (machine-copy m)]
-	[load-value (machine-load m)]
-	[store-value (machine-store m)])
-    (seq (store-value (const 26) (const 65))
-	 (load-value (const 26) reg.val)
-	 
+  (let ([load (machine-load m)]
+	[store (machine-store m)])
+    (seq (store (const 26) (const 65))
+	 (load (const 26) reg.val)
 	 (show-value reg.val)
-
-	 (set-constant reg.val 10)
-	 (show-value reg.val)
-	 )))
+	 (show-constant-string "Hello, world!\n")
+	 (show-value reg.val))
+  ))
 
 (display-assembly (machine-assemble foo))
