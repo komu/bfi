@@ -1,3 +1,4 @@
+#!r6rs
 (library (bf asm-primitives)
   (export seq loop move-pointer transfer set-constant add-constant subtract-constant
 	  add-and-zero add-and-zero/relative add-with-scratch loop-while-not-equal

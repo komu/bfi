@@ -1,3 +1,4 @@
+#!r6rs
 (library (bf utils)
   (export flatmap take starts-with? starts-with-any? replicate make-counter)
   (import (rnrs base))
