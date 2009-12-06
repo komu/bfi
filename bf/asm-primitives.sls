@@ -1,7 +1,7 @@
 (library (bf asm-primitives)
   (export seq loop move-pointer transfer set-constant add-constant subtract-constant
-	  add-and-zero add-and-zero-relative add-with-scratch loop-while-not-equal
-	  with-offset display-current make-constant constant? constant-value const)
+	  add-and-zero add-and-zero/relative add-with-scratch loop-while-not-equal
+	  with-offset display-current constant? constant-value const)
   (import (rnrs base)
 	  (rnrs records syntactic)
 	  (bf utils))
@@ -10,6 +10,8 @@
   (fields value))
 
 (define const make-constant)
+
+;; Primitives
 
 (define (seq . args) 
   (if (= 1 (length args))
@@ -21,13 +23,6 @@
 
 (define (loop . args)
   (cons 'loop args))
-
-(define (move-pointer v) 
-  (let ([n v])
-    (cons 'seq (replicate (abs n) (if (positive? n) (move-right) (move-left))))))
-
-(define (add n)
-  (cons 'seq (replicate (abs n) (if (positive? n) (inc) (dec)))))
 
 (define (inc)
   (list 'inc))
@@ -41,6 +36,14 @@
 (define (move-right)
   (list 'move-right))
 
+;;
+
+(define (move-pointer n) 
+  (apply seq (replicate (abs n) (if (positive? n) (move-right) (move-left)))))
+
+(define (add n)
+  (apply seq (replicate (abs n) (if (positive? n) (inc) (dec)))))
+
 (define (with-offset offset . items)
   (seq (move-pointer offset)
        (apply seq items)
@@ -52,8 +55,7 @@
 	       (add value)))
 
 (define (add-constant offset value)
-  (with-offset offset
-	       (add value)))
+  (with-offset offset (add value)))
 
 (define (subtract-constant offset value)
   (add-constant offset (- value)))
@@ -73,7 +75,7 @@
   (seq (add-and-zero source (list target scratch))
        (add-and-zero scratch source)))
 
-(define (add-and-zero-relative loc offset)
+(define (add-and-zero/relative loc offset)
   (add-and-zero loc (+ loc offset)))
 
 (define (transfer source target)

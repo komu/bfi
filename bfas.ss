@@ -67,8 +67,8 @@
 		       (+ mem.frame-size mem.tmp1)) ; copy arg1 to tmp1 of first frame
 	 (move-pointer mem.frame-size)              ; move to first frame
 	 (loop (subtract-constant mem.tmp1 1)       ; while tmp1 is non-zero, subtract 1
-	       (add-and-zero-relative mem.tmp1 mem.frame-size)        
-	       (add-and-zero-relative mem.tmp2 mem.frame-size)
+	       (add-and-zero/relative mem.tmp1 mem.frame-size)        
+	       (add-and-zero/relative mem.tmp2 mem.frame-size)
 	       (mem.move-to-next-frame))))
   
   (define (move-back-to-beginning)
@@ -84,12 +84,12 @@
 		       (+ mem.frame-size mem.tmp1)) ; copy arg1 to tmp1 of first frame
 	 (move-pointer mem.frame-size)
 	 (loop (subtract-constant mem.tmp1 1)   ; while tmp1 is non-zero, subtract 1
-	       (add-and-zero-relative mem.tmp1 mem.frame-size) ; move tmp1 to next frame
+	       (add-and-zero/relative mem.tmp1 mem.frame-size) ; move tmp1 to next frame
 	       (mem.move-to-next-frame))))
 
   (define (return-back)
     (loop-while-not-equal mem.tmp1 1
-			  (add-and-zero-relative mem.tmp2 (- mem.frame-size))
+			  (add-and-zero/relative mem.tmp2 (- mem.frame-size))
 			  (mem.move-to-previous-frame)))
 
   (seq (find-frame)
