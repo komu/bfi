@@ -1,7 +1,6 @@
 (import (rnrs base)
 	(rnrs records syntactic)
-	(rnrs io simple)
-	(rnrs bytevectors))
+	(rnrs io simple))
 
 (define-record-type state
   (fields left current right))
@@ -40,14 +39,11 @@
 (define (nop s) s)
 
 (define (display-current s)
-  (display (number->char (state-current s)))
+  (display (integer->char (state-current s)))
   s)
 
 (define (read-into-current state)
   (error "read is unsupported"))
-
-(define (number->char n)
-  (string-ref (utf8->string (make-bytevector 1 n)) 0))
 
 ;;(define (char->number c)
 ;;  (bytevector-ref (string->utf8 (make-string 1 c)) 0))
