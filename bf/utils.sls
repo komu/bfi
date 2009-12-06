@@ -17,11 +17,19 @@
 	   (equal? (car prefix) (car list))
 	   (starts-with? (cdr prefix) (cdr list)))))
 
-(define (starts-with-any? prefixes list)
-  (if (null? prefixes)
+(define (any? f list)
+  (if (null? list)
       #f
-      (or (starts-with? (car prefixes) list)
-	  (starts-with-any? (cdr prefixes) list))))
+      (or (f (car list))
+	  (any? f (cdr list)))))
+
+(define (all? f list)
+  (or (null? list)
+      (and (f (car list))
+	   (all? f (cdr list)))))
+
+(define (starts-with-any? prefixes list)
+  (any? (lambda (prefix) (starts-with? prefix list)) prefixes))
 
 (define (take n list)
   (if (or (zero? n) (null? list))

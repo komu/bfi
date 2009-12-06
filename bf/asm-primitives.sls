@@ -39,11 +39,14 @@
 
 ;;
 
+(define (replicate-commands n e)
+  (apply seq (replicate n e)))
+
 (define (move-pointer n) 
-  (apply seq (replicate (abs n) (if (positive? n) (move-right) (move-left)))))
+  (replicate-commands (abs n) (if (positive? n) (move-right) (move-left))))
 
 (define (add n)
-  (apply seq (replicate (abs n) (if (positive? n) (inc) (dec)))))
+  (replicate-commands (abs n) (if (positive? n) (inc) (dec))))
 
 (define (with-offset offset . items)
   (seq (move-pointer offset)
@@ -65,12 +68,13 @@
   (apply seq (map f xs)))
 
 (define (add-and-zero source targets)
+  (define (increment-target target)
+    (with-offset (- target source) (inc)))
+
   (let ([targets (if (pair? targets) targets (list targets))])
     (with-offset source
 		 (loop (dec)
-		       (map-seq (lambda (target)
-				  (with-offset (- target source) (inc)))
-				targets)))))
+		       (map-seq increment-target targets)))))
 
 (define (add-with-scratch source scratch target)
   (seq (add-and-zero source (list target scratch))
