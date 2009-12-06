@@ -1,12 +1,13 @@
 #!r6rs
 (library (bs asm-machine)
   (export define-machine machine-assemble copy machine-load machine-store
-	  seq copy add subtract show-value
+	  seq copy copy/reset add subtract show-value
 	  const const/char
 	  map-seq)
   (import (rnrs base)
 	  (rnrs records syntactic)
 	  (bf asm-primitives)
+	  (bf registers)
 	  (bf utils))
 
 (define-record-type machine
@@ -15,49 +16,28 @@
 (define-record-type constant
   (fields value))
 
-(define const make-constant)
+(define (const n) (make-constant n))
 (define (const/char c) (const (char->codepoint c)))
 
-(define (make-register n) n)
-(define (register? n) (integer? n))
-(define (register-offset n) n)
-
-(define reg.scratch (make-register 0))
+(define-scratch-register reg.scratch)
 
 ; exported op-codes
 
 (define (show-value value)
-  (with-value value (display-current)))
-
-;; helpers
-
-;; performs selected ops with given value which can either be a constant or register
-(define (with-value value . ops)
   (cond [(constant? value)
-	 (with-constant (constant-value value) (apply seq ops))]
+	 (seq (copy reg.scratch value)
+	      (display-current)
+	      (copy reg.scratch (const 0)))]
 	[(register? value)
-	 (with-register value (apply seq ops))]
+	 (with-register value (display-current))]
 	[else 
-	 (error "invalid operand -- " value)]))
-
-(define (with-constant constant . items)
-  (seq (copy reg.scratch (const constant))
-       (apply seq items)
-       (copy reg.scratch (const 0))))
-
-(define (with-register reg . items)
-  (with-offset (register-offset reg)
-	       (apply seq items)))
-
-(define (with-offset offset . items)
-  (seq (move-pointer offset)
-       (apply seq items)
-       (move-pointer (- offset))))
+	 (error "show-value: invalid value -- " value)]))
 
 (define (copy target source)
+  (check (register? target) "copy: target is not a register -- " target)
   (cond [(register? source)
 	 (seq (copy target (const 0))
-	      (add-with-scratch source reg.scratch target))]
+	      (add target source))]
 	[(constant? source)
 	 (with-register target
 			(loop (dec-current)) ; set to zero
@@ -65,15 +45,25 @@
 	[else 
 	 (error "copy: invalid source operand -- " + source)]))
 
-(define (add reg value)
+;; copies source to target and resets the source to zero
+;; todo: optimize this implementation
+(define (copy/reset target source)
+  (seq (copy target source)
+       (copy source (const 0))))
+
+(define (add target value)
+  (check (register? target) "add: target is not a register -- " target)
   (cond [(register? value)
-	 (error "add with register is not supported -- " reg)]
+	 (primitive-add-with-scratch (register-offset target)
+				     (register-offset value)
+				     (register-offset reg.scratch))]
 	[(constant? value)
-	 (with-register reg (add-current (constant-value value)))]
+	 (primitive-add (register-offset target) (constant-value value))]
 	[else 
 	 (error "add: invalid operand -- " + value)]))
 
 (define (subtract reg value)
+  (check (register? reg) "subtract: target is not a register --" reg)
   (cond [(register? value)
 	 (error "subtract with register is not supported -- " reg)]
 	[(constant? value)
@@ -81,10 +71,42 @@
 	[else 
 	 (error "subtract: invalid operand -- " + value)]))
 
+;; exported helpers
+
 (define (map-seq f xs)
   (apply seq (map f xs)))
 
-(define (add-and-zero source targets)
+(define (machine-assemble m) 
+  (m))
+
+;; internal implementation
+
+(define-syntax with-register
+  (syntax-rules ()
+    [(_ reg op ...)
+     (with-offset (register-offset reg) op ...)]))
+
+(define-syntax with-offset
+  (syntax-rules ()
+    [(_ offset-exp op ...)
+     (let ([offset offset-exp])
+       (seq (move-pointer offset)
+	    op ...
+	    (move-pointer (- offset))))]))
+
+(define (check condition . args)
+  (if (not condition) (apply error args)))
+
+;;
+;; Primitives operations
+;;
+;; These operations don't know anything about registers or constants
+;; they operate on raw values. They don't use any temporary scratches
+;; other than what have been explicitly specified in their argument list.
+;;
+
+;; adds the value of source to targets and resets the source to zero
+(define (primitive-add/reset source targets)
   (define (increment-target target)
     (with-offset (- target source) (inc-current)))
 
@@ -93,97 +115,100 @@
 		 (loop (dec-current)
 		       (map-seq increment-target targets)))))
 
-(define (add-with-scratch source scratch target)
-  (seq (add-and-zero source (list target scratch))
-       (add-and-zero scratch source)))
+;; adds source to target preserving value of source using scratch
+(define (primitive-add-with-scratch target source scratch)
+  (check (and (integer? target) (integer? scratch) (integer? source))
+	 "add-with-scratch: invalid arguments -- " target scratch source)
+  (seq (primitive-add/reset source (list target scratch))
+       (primitive-add/reset scratch source)))
 
-(define (add-and-zero/relative loc offset)
-  (add-and-zero loc (+ loc offset)))
+(define (primitive-add offset value)
+  (check (and (integer? offset) (integer? value))
+	 "primitive-add: invalid arguments -- " offset value)
 
-(define (transfer source target)
-  (seq (copy target (const 0))
-       (add-and-zero source target)))
+  (with-offset offset (add-current value)))
 
-(define (loop-while-not-equal offset value . body)
-  (seq (subtract offset (const value))   ; subtract to get zero if value is equal
-       (loop (add offset (const value))  ; restore the value
+(define (primitive-subtract offset value)
+  (primitive-add offset (- value)))
+
+(define (primitive-loop-while-not-equal offset value . body)
+  (seq (primitive-subtract offset value)   ; subtract to get zero if value is equal
+       (loop (primitive-add offset value)  ; restore the value
 	     (apply seq body)
-	     (subtract offset (const value)))
-       (add offset (const value))))      ; restore the value
+	     (primitive-subtract offset value))
+       (primitive-add offset value)))      ; restore the value
 
-; implementation
 
-(define (machine-assemble m) (m))
+;;
+;; Random access memory abstraction
+;;
 
+(define mem.frame-size 3)
 (define mem.arg1 1)
 (define mem.arg2 2)
 (define mem.tmp1 0)
 (define mem.tmp2 1)
 (define mem.value 2)
-(define mem.frame-size 3)
+(define mem.next.tmp1 (+ mem.tmp1 mem.frame-size))
+(define mem.next.tmp2 (+ mem.tmp2 mem.frame-size))
+(define mem.previous.tmp1 (+ mem.tmp1 (- mem.frame-size)))
+(define mem.previous.tmp2 (+ mem.tmp2 (- mem.frame-size)))
 
-(define (mem.move-to-next-frame)
-  (move-pointer mem.frame-size))
+(define (mem.move-to-next-frame)     (move-pointer mem.frame-size))
+(define (mem.move-to-previous-frame) (move-pointer (- mem.frame-size)))
 
-(define (mem.move-to-previous-frame)
-  (move-pointer (- mem.frame-size)))
+;; given address in arg1 and optional parameter in arg2, moves to the frame
+;; given by arg1 and moving value to arg2 to tmp2 of given frame.
+(define (mem.find-frame)
+  (seq (primitive-add/reset mem.arg1 mem.next.tmp1)
+       (primitive-add/reset mem.arg2 mem.next.tmp2)
+       (mem.move-to-next-frame)
+       (loop (primitive-subtract mem.tmp1 1) ; subtract address until frame is found
+	     (primitive-add/reset mem.tmp1 mem.next.tmp1)
+	     (primitive-add/reset mem.tmp2 mem.next.tmp2)
+	     (mem.move-to-next-frame))))
 
 (define (mem.store-primitive)
-  (define (find-frame)
-    (seq (add-and-zero mem.arg1
-		       (+ mem.frame-size mem.tmp1)) ; copy arg1 to tmp1 of first frame
-	 (move-pointer mem.frame-size)              ; move to first frame
-	 (loop (subtract mem.tmp1 (const 1))       ; while tmp1 is non-zero, subtract 1
-	       (add-and-zero/relative mem.tmp1 mem.frame-size)        
-	       (add-and-zero/relative mem.tmp2 mem.frame-size)
-	       (mem.move-to-next-frame))))
-  
-  (define (move-back-to-beginning)
-    (loop-while-not-equal mem.tmp1 1 (mem.move-to-previous-frame)))
-  
-  (seq (find-frame)
-       (transfer mem.tmp2 mem.value)
-       (move-back-to-beginning)))
-
-(define (mem.load-primitive)
-  (define (find-frame)
-    (seq (add-and-zero mem.arg1
-		       (+ mem.frame-size mem.tmp1)) ; copy arg1 to tmp1 of first frame
-	 (move-pointer mem.frame-size)
-	 (loop (subtract mem.tmp1 (const 1))   ; while tmp1 is non-zero, subtract 1
-	       (add-and-zero/relative mem.tmp1 mem.frame-size) ; move tmp1 to next frame
-	       (mem.move-to-next-frame))))
-
   (define (return-back)
-    (loop-while-not-equal mem.tmp1 1
-			  (add-and-zero/relative mem.tmp2 (- mem.frame-size))
-			  (mem.move-to-previous-frame)))
-
-  (seq (find-frame)
-       (add-with-scratch mem.value mem.tmp1 mem.tmp2) ; copy value to tmp2 using tmp1
+    (primitive-loop-while-not-equal mem.tmp1 1 
+      (mem.move-to-previous-frame)))
+  
+  (seq (mem.find-frame)
+       (copy (make-register mem.value) (const 0))
+       (primitive-add/reset mem.value mem.tmp2)
        (return-back)))
 
-(define (make-memory mem.offset)
+(define (mem.load-primitive)
+  (define (return-back)
+    (primitive-loop-while-not-equal mem.tmp1 1
+      (primitive-add/reset mem.tmp2 mem.previous.tmp2)
+      (mem.move-to-previous-frame)))
 
-  (define reg.mem.arg1 (+ mem.offset mem.arg1))
-  (define reg.mem.arg2 (+ mem.offset mem.arg2))
+  (seq (mem.find-frame)
+       (primitive-add-with-scratch mem.tmp2 mem.value mem.tmp1)
+       (return-back)))
 
-  (define (address-offset addr)
-    (+ mem.offset (* (+ 1 addr) mem.frame-size) mem.value))
+(define (build-machine mem.offset)
+  (define reg.mem.arg1 (make-register (+ mem.offset mem.arg1)))
+  (define reg.mem.arg2 (make-register (+ mem.offset mem.arg2)))
 
-  (define (load-value address reg.target)
+  (define (address-register addr)
+    (make-register (+ mem.offset (* (+ 1 addr) mem.frame-size) mem.value)))
+
+  (define (load-value target address)
+    (check (register? target) "load-value: target is not a register -- " target)
     (cond [(constant? address)
-	   (copy reg.target (address-offset (constant-value address)))]
+	   (copy target (address-register (constant-value address)))]
 	  [(register? address)
 	   (seq (copy reg.mem.arg1 address)
 		(with-offset mem.offset (mem.load-primitive))
-		(copy reg.target reg.mem.arg1))]
+		(copy/reset target reg.mem.arg1))]
 	  [else
 	   (error "load-value: invalid address -- " address)]))
 
   (define (store-value address value)
     (cond [(constant? address)
-	   (copy (address-offset (constant-value address)) value)]
+	   (copy (address-register (constant-value address)) value)]
 	  [(register? address)
 	   (seq (copy reg.mem.arg1 address)
 		(copy reg.mem.arg2 value)
@@ -191,14 +216,14 @@
 	  [else
 	   (error "store-value: invalid address -- " address)]))
   
-  (make-machine (copy mem.offset (const 1))
+  (make-machine (copy (make-register mem.offset) (const 1))
 		load-value
 		store-value))
 
 (define-syntax define-machine-internal
   (syntax-rules ()
     [(define-machine-internal make-reg m () body ...)
-     (let ([m (make-memory (make-reg))]) 
+     (let ([m (build-machine (register-offset (make-reg)))]) 
        (seq (machine-initializer m) body ...))]
     [(define-machine-internal make-reg m (r) body ...)
      (let ([r (make-reg)]) 
@@ -211,8 +236,7 @@
   (syntax-rules ()
     [(_ name m regs body ...) 
      (define (name)
-       (let* ([c (make-counter 1)]
-	      [make-reg (lambda () (make-register (c)))])
+       (let ([make-reg (register-maker)])
 	 (define-machine-internal make-reg m regs body ...)))]))
 
 )

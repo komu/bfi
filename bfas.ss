@@ -18,8 +18,10 @@
   
   (let ([load (machine-load m)]
 	[store (machine-store m)])
-    (seq (store (const 26) (const 65))
-	 (load (const 26) reg.val)
+    (seq (store (const 26) (const/char #\a))
+	 (copy reg.val (const 26))
+	 (store reg.val (const/char #\b))
+	 (load reg.val reg.val)
 	 (show-value reg.val)
 	 (show-constant-string "Hello, world!\n")
 	 (show-value reg.val))
