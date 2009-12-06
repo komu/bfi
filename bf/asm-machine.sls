@@ -1,6 +1,6 @@
 #!r6rs
 (library (bs asm-machine)
-  (export define-machine machine-assemble copy machine-load machine-store
+  (export define-machine machine-assemble
 	  seq copy copy/reset add subtract show-value
 	  const const/char
 	  map-seq)
@@ -19,15 +19,16 @@
 (define (const n) (make-constant n))
 (define (const/char c) (const (char->codepoint c)))
 
-(define-scratch-register reg.scratch)
+(define-scratch-register reg.scratch0)
+(define-scratch-register reg.scratch1)
 
 ; exported op-codes
 
 (define (show-value value)
   (cond [(constant? value)
-	 (seq (copy reg.scratch value)
+	 (seq (copy reg.scratch0 value)
 	      (display-current)
-	      (copy reg.scratch (const 0)))]
+	      (copy reg.scratch0 (const 0)))]
 	[(register? value)
 	 (with-register value (display-current))]
 	[else 
@@ -56,7 +57,7 @@
   (cond [(register? value)
 	 (primitive-add-with-scratch (register-offset target)
 				     (register-offset value)
-				     (register-offset reg.scratch))]
+				     (register-offset reg.scratch0))]
 	[(constant? value)
 	 (primitive-add (register-offset target) (constant-value value))]
 	[else 
@@ -220,23 +221,15 @@
 		load-value
 		store-value))
 
-(define-syntax define-machine-internal
-  (syntax-rules ()
-    [(define-machine-internal make-reg m () body ...)
-     (let ([m (build-machine (register-offset (make-reg)))]) 
-       (seq (machine-initializer m) body ...))]
-    [(define-machine-internal make-reg m (r) body ...)
-     (let ([r (make-reg)]) 
-       (define-machine-internal make-reg m () body ...))]
-    [(define-machine-internal make-reg m (r . rs) body ...) 
-     (let ([r (make-reg)]) 
-       (define-machine-internal make-reg m rs body ...))]))
-
 (define-syntax define-machine
   (syntax-rules ()
-    [(_ name m regs body ...) 
+    [(_ name (reg ...) (load store) body ...)
      (define (name)
-       (let ([make-reg (register-maker)])
-	 (define-machine-internal make-reg m regs body ...)))]))
+       (let* ([make-reg (register-maker)]
+	      [reg (make-reg (quote reg))] ...
+	      [m (build-machine (register-offset (make-reg 'memory)))]
+	      [load (machine-load m)]
+	      [store (machine-store m)])
+	 (seq (machine-initializer m) body ...)))]))
 
 )
