@@ -38,10 +38,6 @@
 (define (read-into-current! state)
   (error "read is unsupported"))
 
-;;(define (char->number c)
-;;  (bytevector-ref (string->utf8 (make-string 1 c)) 0))
-
-
 (define (parse lexer)
   (define (parse-exps)
     (let ([ch (lexer)])
