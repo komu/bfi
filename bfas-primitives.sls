@@ -1,21 +1,30 @@
 (library (bfas-primitives)
-  (export seq loop move-pointer add transfer add-constant subtract-constant
-	  add-and-zero add-and-zero-relative add-with-scratch loop-while-not-equal)
-  (import (rnrs base))
+  (export seq loop move-pointer transfer set-constant add-constant subtract-constant
+	  add-and-zero add-and-zero-relative add-with-scratch loop-while-not-equal
+	  with-offset display-current make-constant constant? constant-value const)
+  (import (rnrs base)
+	  (rnrs records syntactic)
+	  (utils))
 
-(define (replicate n x)
-  (if (zero? n) '() (cons x (replicate (- n 1) x))))
+(define-record-type constant
+  (fields value))
+
+(define const make-constant)
 
 (define (seq . args) 
   (if (= 1 (length args))
       (car args)
       (cons 'seq args)))
 
+(define (display-current)
+  (list 'display))
+
 (define (loop . args)
   (cons 'loop args))
 
-(define (move-pointer n) 
-  (cons 'seq (replicate (abs n) (if (positive? n) (move-right) (move-left)))))
+(define (move-pointer v) 
+  (let ([n v])
+    (cons 'seq (replicate (abs n) (if (positive? n) (move-right) (move-left))))))
 
 (define (add n)
   (cons 'seq (replicate (abs n) (if (positive? n) (inc) (dec)))))

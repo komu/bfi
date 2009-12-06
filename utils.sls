@@ -1,6 +1,11 @@
 (library (utils)
-  (export flatmap take starts-with? starts-with-any?)
+  (export flatmap take starts-with? starts-with-any? replicate make-counter)
   (import (rnrs base))
+
+(define (replicate n x)
+  (if (zero? n)
+      '()
+      (cons x (replicate (- n 1) x))))
 
 (define (flatmap f l)
   (apply append (map f l)))
@@ -21,5 +26,12 @@
   (if (or (zero? n) (null? list))
       '()
       (cons (car list) (take (- n 1) (cdr list)))))
+
+
+(define (make-counter count)
+  (lambda ()
+    (let ([value count])
+      (set! count (+ count 1))
+      value)))
 
 )
