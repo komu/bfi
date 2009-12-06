@@ -9,8 +9,7 @@
   (import (rnrs base)
 	  (rnrs records syntactic)
 	  (bf asm-primitives)
-	  (bf registers)
-	  (bf utils))
+	  (bf registers))
 
 (define-record-type machine
   (fields initializer load store))
@@ -19,7 +18,7 @@
   (fields value))
 
 (define (const n) (make-constant n))
-(define (const/char c) (const (char->codepoint c)))
+(define (const/char c) (const (char->integer c)))
 
 (define-scratch-register reg.scratch0)
 (define-scratch-register reg.scratch1)
