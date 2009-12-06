@@ -15,6 +15,9 @@
 (define (state-current-value s)
   (vector-ref (state-mem s) (state-pointer s)))
 
+(define (state-set-current-value! s n)
+  (vector-set! (state-mem s) (state-pointer s) n))
+
 (define (make-move n)
   (lambda (s)
     (state-pointer-set! s (+ n (state-pointer s)))))
@@ -27,7 +30,7 @@
 
 (define (make-set n)
   (lambda (s)
-    (vector-set! (state-mem s) (state-pointer s) n)))
+    (state-set-current-value! s n)))
 
 (define nop
   (lambda (s) 'nop))
@@ -35,8 +38,8 @@
 (define (display-current s)
   (display (integer->char (state-current-value s))))
 
-(define (read-into-current! state)
-  (error "read is unsupported"))
+(define (read-into-current s)
+  (state-set-current-value! s (char->integer  (read-char))))
 
 (define (parse lexer)
   (define (parse-exps)
@@ -86,7 +89,7 @@
       [(move)    (make-move (cadr p))]
       [(set)     (make-set (cadr p))]
       [(display) display-current]
-      [(read)    read-into-current!]
+      [(read)    read-into-current]
       [else      (error "invalid form -- " p)]))
 
   (analyze-seq e))

@@ -42,12 +42,9 @@
   (display (integer->char (state-current s)))
   s)
 
-(define (read-into-current state)
-  (error "read is unsupported"))
-
-;;(define (char->number c)
-;;  (bytevector-ref (string->utf8 (make-string 1 c)) 0))
-
+(define (read-into-current s)
+  (let ([value (char->integer (read-char))])
+    (make-state (state-left s) value (state-right s))))
 
 (define (parse lexer)
   (define (parse-exps)
