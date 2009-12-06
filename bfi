@@ -1,1 +1,2 @@
-larceny -path . -r6rs -program bfi.ss
+# larceny -path . -r6rs -program bfi.ss
+plt-r6rs ++path . bfi.ss
