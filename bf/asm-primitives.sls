@@ -1,10 +1,10 @@
-(library (bfas-primitives)
+(library (bf asm-primitives)
   (export seq loop move-pointer transfer set-constant add-constant subtract-constant
 	  add-and-zero add-and-zero-relative add-with-scratch loop-while-not-equal
 	  with-offset display-current make-constant constant? constant-value const)
   (import (rnrs base)
 	  (rnrs records syntactic)
-	  (utils))
+	  (bf utils))
 
 (define-record-type constant
   (fields value))

@@ -2,8 +2,8 @@
         (rnrs control)
 	(rnrs lists)
         (rnrs io simple)
-	(bfas-primitives)
-	(utils))
+	(bf asm-primitives)
+	(bf utils))
 
 ;; assembles a tree of operations into a string representing Brainfuck program
 (define (assemble tree)
