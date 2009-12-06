@@ -163,7 +163,7 @@
        (add-with-scratch mem.value mem.tmp1 mem.tmp2) ; copy value to tmp2 using tmp1
        (return-back)))
 
-(define (make-memory mem.offset unused)
+(define (make-memory mem.offset)
 
   (define reg.mem.arg1 (+ mem.offset mem.arg1))
   (define reg.mem.arg2 (+ mem.offset mem.arg2))
@@ -197,19 +197,22 @@
 
 (define-syntax define-machine-internal
   (syntax-rules ()
-    [(define-machine-internal c m () body ...)
-     (let ([m (make-memory (c) (c))]) 
+    [(define-machine-internal make-reg m () body ...)
+     (let ([m (make-memory (make-reg))]) 
        (seq (machine-initializer m) body ...))]
-    [(define-machine-internal c m (r) body ...)
-     (let ([r (c)]) (define-machine-internal c m () body ...))]
-    [(define-machine-internal c m (r . rs) body ...) 
-     (let ([r (c)]) (define-machine-internal c m rs body ...))]))
+    [(define-machine-internal make-reg m (r) body ...)
+     (let ([r (make-reg)]) 
+       (define-machine-internal make-reg m () body ...))]
+    [(define-machine-internal make-reg m (r . rs) body ...) 
+     (let ([r (make-reg)]) 
+       (define-machine-internal make-reg m rs body ...))]))
 
 (define-syntax define-machine
   (syntax-rules ()
     [(_ name m regs body ...) 
      (define (name)
-       (let ([c (make-counter 1)])
-	 (define-machine-internal c m regs body ...)))]))
+       (let* ([c (make-counter 1)]
+	      [make-reg (lambda () (make-register (c)))])
+	 (define-machine-internal make-reg m regs body ...)))]))
 
 )
