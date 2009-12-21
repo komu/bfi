@@ -2,7 +2,7 @@
 (library (bs asm-machine)
   (export define-machine machine-assemble
 	  copy copy/reset
-	  add subtract multiply
+	  add subtract multiply divide
 	  show-value
 	  const const/char
 	  seq map-seq)
@@ -73,13 +73,19 @@
 		       (subtract reg.scratch1 (const 1)))))
 
 (define (subtract reg value)
-  (check (register? reg) "subtract: target is not a register --" reg)
+  (check (register? reg) "subtract: target is not a register -- " reg)
+
   (cond [(register? value)
 	 (error "subtract with register is not supported -- " reg)]
 	[(constant? value)
 	 (add reg (const (- (constant-value value))))]
 	[else 
-	 (error "subtract: invalid operand -- " + value)]))
+	 (error "subtract: invalid operand -- " value)]))
+
+(define (divide reg divisor)
+  (check (register? reg) "divide: target is not a register -- " reg)
+
+  (error "divide: unimplemented"))
 
 ;; exported helpers
 

@@ -1,7 +1,8 @@
 #!r6rs
 (library (bf utils)
   (export flatmap take starts-with? starts-with-any? replicate make-counter)
-  (import (rnrs base))
+  (import (rnrs base)
+	  (rnrs lists))
 
 (define (replicate n x)
   (if (zero? n)
@@ -17,19 +18,8 @@
 	   (equal? (car prefix) (car list))
 	   (starts-with? (cdr prefix) (cdr list)))))
 
-(define (any? f list)
-  (if (null? list)
-      #f
-      (or (f (car list))
-	  (any? f (cdr list)))))
-
-(define (all? f list)
-  (or (null? list)
-      (and (f (car list))
-	   (all? f (cdr list)))))
-
 (define (starts-with-any? prefixes list)
-  (any? (lambda (prefix) (starts-with? prefix list)) prefixes))
+  (exists (lambda (prefix) (starts-with? prefix list)) prefixes))
 
 (define (take n list)
   (if (or (zero? n) (null? list))
