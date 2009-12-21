@@ -2,13 +2,24 @@
 	(rnrs records syntactic)
 	(rnrs io simple))
 
+;; The state is defined as a zipper with three fields
+;;  - left: cells to the left of current cell, in reverse order
+;;  - current: the current cell
+;;  - right: cells to the right of current cell
+;;
+;; This structure allows for a purely functional implementation that
+;; supports all Brainfuck primitives in O(1) time.
 (define-record-type state
   (fields left current right))
 
+;; In an initial state there are no cells to the left, since we are
+;; at the beginning of the tape. The current cell is zero. We don't
+;; need to allocate cells on the right, since they are lazily created
+;; as needed (see move-right).
 (define (initial-state)
   (make-state '() 0 '()))
 
-; moves to the left on the tape; it is an error to go past the left edge
+;; Moves to the left on the tape; it is an error to go past the left edge.
 (define (move-left s)
   (let ([left (state-left s)])
     (if (null? left)
@@ -17,7 +28,7 @@
 		    (car left) 
 		    (cons (state-current s) (state-right s))))))
 
-; moves to the right on the tape, allocating more space if necessary
+;; Moves to the right on the tape, allocating more space if necessary.
 (define (move-right s)
   (define (normalize p) 
     (if (null? p) (list 0) p)) 
@@ -27,6 +38,8 @@
 		(car right)
 		(cdr right))))
 
+;; Returns a new state where the current element has been transformed
+;; with given function.
 (define (modify-current f s)
   (make-state (state-left s) (f (state-current s)) (state-right s)))
 
@@ -43,9 +56,14 @@
   s)
 
 (define (read-into-current s)
-  (let ([value (char->integer (read-char))])
-    (make-state (state-left s) value (state-right s))))
+  (make-state (state-left s) 
+	      (char->integer (read-char))
+	      (state-right s)))
 
+;; Given a lexer, parses a Brainfuck program into an abstract syntax tree.
+;;
+;; The given lexer can be any function which either returns next character
+;; or eof-object when called without arguments.
 (define (parse lexer)
   (define (parse-exps)
     (let ([ch (lexer)])
@@ -58,13 +76,17 @@
 	    [(#\<) (cons '(move-left ) (parse-exps))]
 	    [(#\.) (cons '(display)    (parse-exps))]
 	    [(#\,) (cons '(read)       (parse-exps))]
-	    [(#\]) '()]
 	    [(#\[) (let* ([loop (parse-exps)]
 			  [rest (parse-exps)])
 		     (cons (cons 'loop loop) rest))]
+	    [(#\]) '()]
 	    [else (parse-exps)]))))
   (parse-exps))
 
+;; Transforms parsed AST into an analyzed representation, which
+;; is faster to execute. The result is a function representing
+;; the program: the function can be called with the initial state
+;; of the machine and will return the final state after stopping.
 (define (analyze-program e)
   
   ;; analyze a list of expressions and produce a single
@@ -82,7 +104,7 @@
     (let ([body (analyze-seq p)])
       (lambda (s)
 	(let loop ([s s])
-	  (if (= 0 (state-current s))
+	  (if (zero? (state-current s))
 	      s
 	      (loop (body s)))))))
   
@@ -100,9 +122,11 @@
 
   (analyze-seq e))
 
-(define (string->lexer str)
-  (list->lexer (string->list str)))
+;; Creates a lexer from given string.
+(define (string->lexer s)
+  (list->lexer (string->list s)))
 
+;; Creates a lexer from given list of characters.
 (define (list->lexer input)
   (lambda ()
     (if (null? input)
@@ -111,6 +135,7 @@
 	  (set! input (cdr input))
 	  ch))))
 
+;; Parses, analyzes and executes the program provided by given lexer.
 (define (run lexer)
   (let* ([exp (parse lexer)]
 	 [analyzed (analyze-program exp)])
