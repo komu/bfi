@@ -15,7 +15,7 @@
 (define (state-current-value s)
   (vector-ref (state-mem s) (state-pointer s)))
 
-(define (state-set-current-value! s n)
+(define (state-current-value-set! s n)
   (vector-set! (state-mem s) (state-pointer s) n))
 
 (define (make-move n)
@@ -30,7 +30,7 @@
 
 (define (make-set n)
   (lambda (s)
-    (state-set-current-value! s n)))
+    (state-current-value-set! s n)))
 
 (define nop
   (lambda (s) 'nop))
@@ -39,10 +39,10 @@
   (display (integer->char (state-current-value s))))
 
 (define (read-into-current s)
-  (state-set-current-value! s (char->integer  (read-char))))
+  (state-current-value-set! s (char->integer (read-char))))
 
 (define (parse lexer)
-  (define (parse-exps)
+  (let parse-exps ()
     (let ([ch (lexer)])
       (if (eof-object? ch)
 	  '()
@@ -53,12 +53,11 @@
 	    [(#\<) (cons '(move -1) (parse-exps))]
 	    [(#\.) (cons '(display) (parse-exps))]
 	    [(#\,) (cons '(read)    (parse-exps))]
-	    [(#\]) '()]
 	    [(#\[) (let* ([loop (parse-exps)]
 			  [rest (parse-exps)])
 		     (cons (cons 'loop loop) rest))]
-	    [else (parse-exps)]))))
-  (parse-exps))
+	    [(#\]) '()]
+	    [else (parse-exps)])))))
 
 (define (analyze-program e)
   
@@ -77,7 +76,7 @@
     (let ([body (analyze-seq p)])
       (lambda (s)
 	(let loop ()
-	  (unless (= 0 (state-current-value s))
+	  (unless (zero? (state-current-value s))
 		  (body s) 
 		  (loop))))))
   
@@ -94,10 +93,10 @@
 
   (analyze-seq e))
 
-(define (tagged-value tag p)
-  (and (pair? p) (eq? tag (car p)) (cadr p)))
-
 (define (optimize program)
+  (define (tagged-value tag p)
+    (and (pair? p) (eq? tag (car p)) (cadr p)))
+
   (define (merge-adjacent tag <+> p)
     (let recur ([p p])
       (define (merge-deeper p) 
